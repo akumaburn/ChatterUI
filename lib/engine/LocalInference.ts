@@ -35,11 +35,14 @@ export const localSamplerData: APISampler[] = [
     { externalName: 'penalty_present', samplerID: SamplerID.PRESENCE_PENALTY },
     { externalName: 'enable_thinking', samplerID: SamplerID.ENABLE_THINKING },
     { externalName: 'penalty_freq', samplerID: SamplerID.FREQUENCY_PENALTY },
-    { externalName: 'xtc_t', samplerID: SamplerID.XTC_THRESHOLD },
-    { externalName: 'xtc_p', samplerID: SamplerID.XTC_PROBABILITY },
+    { externalName: 'xtc_threshold', samplerID: SamplerID.XTC_THRESHOLD },
+    { externalName: 'xtc_probability', samplerID: SamplerID.XTC_PROBABILITY },
+    { externalName: 'top_n_sigma', samplerID: SamplerID.TOP_N_SIGMA },
     { externalName: 'seed', samplerID: SamplerID.SEED },
+    { externalName: 'ignore_eos', samplerID: SamplerID.BAN_EOS_TOKEN },
     { externalName: 'dry_base', samplerID: SamplerID.DRY_BASE },
     { externalName: 'dry_allowed_length', samplerID: SamplerID.DRY_ALLOWED_LENGTH },
+    { externalName: 'dry_penalty_last_n', samplerID: SamplerID.DRY_PENALTY_LAST_N },
     { externalName: 'dry_multiplier', samplerID: SamplerID.DRY_MULTIPLIER },
     { externalName: 'dry_sequence_breakers', samplerID: SamplerID.DRY_SEQUENCE_BREAK },
 ]
@@ -56,8 +59,11 @@ const getSamplerFields = (max_length?: number) => {
                     cleanvalue = Math.min(value, max_length)
                 } else if (samplerItem.values.type === 'integer') cleanvalue = Math.floor(value)
             if (item.samplerID === SamplerID.DRY_SEQUENCE_BREAK) {
-                //@ts-expect-error. This is due to a migration
-                cleanvalue = (value as string).split(',')
+                const breakers = typeof value === 'string' ? value : ''
+                // Fall back to llama.cpp's default DRY sequence breakers when none are set,
+                // otherwise an empty breaker would weaken the DRY sampler.
+                //@ts-expect-error cleanvalue becomes a string[] for the breakers payload
+                cleanvalue = breakers.length > 0 ? breakers.split(',') : ['\n', ':', '"', '*']
             }
             return { [item.externalName as SamplerID]: cleanvalue }
         })
@@ -66,7 +72,6 @@ const getSamplerFields = (max_length?: number) => {
 
 const buildLocalPayload = async () => {
     const payloadFields = getSamplerFields()
-    const rep_pen = payloadFields?.['penalty_repeat']
     const reasoning = payloadFields?.['enable_thinking'] as boolean
     const localPreset: LlamaConfig = Llama.useLlamaPreferencesStore.getState().config
     let prompt: undefined | string = undefined
@@ -149,7 +154,6 @@ const buildLocalPayload = async () => {
 
     return {
         ...payloadFields,
-        penalize_nl: typeof rep_pen === 'number' && rep_pen > 1,
         n_threads: localPreset.threads,
         prompt: prompt ?? '',
         stop: constructStopSequence(),
@@ -427,7 +431,14 @@ const obtainFields = async (): Promise<ContextBuilderParams | void> => {
         const samplers = SamplersManager.getCurrentSampler()
 
         const instructLength = engineData.context_length
-        const length = Math.max(instructLength - samplers.genamt, 0)
+        // genamt <= 0 means unlimited generation (n_predict = -1). Since there is no fixed
+        // amount to reserve, hold back a sensible response buffer so the prompt doesn't fill
+        // the entire context (generation then continues via context shifting).
+        const genReserve =
+            samplers.genamt > 0
+                ? samplers.genamt
+                : Math.min(2048, Math.floor(instructLength / 4))
+        const length = Math.max(instructLength - genReserve, 0)
 
         return {
             apiConfig: Object.assign({}, apiConfig),

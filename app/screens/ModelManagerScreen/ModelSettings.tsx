@@ -12,7 +12,7 @@ import ThemedSwitch from '@components/input/ThemedSwitch'
 import SectionTitle from '@components/text/SectionTitle'
 import Alert from '@components/views/Alert'
 import { AppSettings, Global } from '@lib/constants/GlobalValues'
-import { Llama } from '@lib/engine/Local/LlamaLocal'
+import { cacheTypeValues, flashAttnValues, Llama } from '@lib/engine/Local/LlamaLocal'
 import { KV } from '@lib/engine/Local/Model'
 import useBackendDevices from '@lib/hooks/BackendDevices'
 import { Logger } from '@lib/state/Logger'
@@ -95,8 +95,8 @@ const ModelSettings: React.FC<ModelSettingsProp> = ({ modelImporting, modelLoadi
                         label="Max Context"
                         value={config.context_length}
                         onValueChange={(value) => setConfig({ ...config, context_length: value })}
-                        min={1024}
-                        max={32768}
+                        min={256}
+                        max={1048576}
                         step={1024}
                         disabled={modelImporting || modelLoading}
                     />
@@ -115,7 +115,17 @@ const ModelSettings: React.FC<ModelSettingsProp> = ({ modelImporting, modelLoadi
                         value={config.batch}
                         onValueChange={(value) => setConfig({ ...config, batch: value })}
                         min={16}
-                        max={1024}
+                        max={4096}
+                        step={16}
+                        disabled={modelImporting || modelLoading}
+                    />
+
+                    <ThemedSlider
+                        label="Micro Batch (uBatch)"
+                        value={config.ubatch}
+                        onValueChange={(value) => setConfig({ ...config, ubatch: value })}
+                        min={16}
+                        max={4096}
                         step={16}
                         disabled={modelImporting || modelLoading}
                     />
@@ -127,11 +137,54 @@ const ModelSettings: React.FC<ModelSettingsProp> = ({ modelImporting, modelLoadi
                             value={config.gpu_layers}
                             onValueChange={(value) => setConfig({ ...config, gpu_layers: value })}
                             min={0}
-                            max={100}
+                            max={256}
                             step={1}
                             disabled={modelImporting || modelLoading}
                         />
                     )}
+
+                    <ThemedSlider
+                        label="CPU MoE Layers"
+                        value={config.cpu_moe_layers}
+                        onValueChange={(value) => setConfig({ ...config, cpu_moe_layers: value })}
+                        min={0}
+                        max={256}
+                        step={1}
+                        disabled={modelImporting || modelLoading}
+                    />
+
+                    <HorizontalSelector
+                        style={{ paddingBottom: 12 }}
+                        label="Flash Attention"
+                        values={flashAttnValues.map((item) => ({
+                            label: item.toUpperCase(),
+                            value: item,
+                        }))}
+                        selected={config.flash_attn}
+                        onPress={(value) => setConfig({ ...config, flash_attn: value })}
+                    />
+
+                    <HorizontalSelector
+                        style={{ paddingBottom: 12 }}
+                        label="KV Cache Type (K)"
+                        values={cacheTypeValues.map((item) => ({
+                            label: item.toUpperCase(),
+                            value: item,
+                        }))}
+                        selected={config.cache_type_k}
+                        onPress={(value) => setConfig({ ...config, cache_type_k: value })}
+                    />
+
+                    <HorizontalSelector
+                        style={{ paddingBottom: 12 }}
+                        label="KV Cache Type (V)"
+                        values={cacheTypeValues.map((item) => ({
+                            label: item.toUpperCase(),
+                            value: item,
+                        }))}
+                        selected={config.cache_type_v}
+                        onPress={(value) => setConfig({ ...config, cache_type_v: value })}
+                    />
 
                     <ThemedSwitch
                         label="Context Shift"
@@ -139,6 +192,39 @@ const ModelSettings: React.FC<ModelSettingsProp> = ({ modelImporting, modelLoadi
                         onChangeValue={(value) => {
                             setConfig({ ...config, ctx_shift: value })
                         }}
+                    />
+
+                    <ThemedSwitch
+                        label="Use mmap"
+                        value={config.use_mmap}
+                        onChangeValue={(value) => setConfig({ ...config, use_mmap: value })}
+                        description="Memory-map the model file instead of loading it fully into RAM."
+                    />
+
+                    <ThemedSwitch
+                        label="Use mlock"
+                        value={config.use_mlock}
+                        onChangeValue={(value) => setConfig({ ...config, use_mlock: value })}
+                        description="Lock the model in RAM to prevent it from being swapped out."
+                    />
+
+                    <ThemedSwitch
+                        label="Unified KV Cache"
+                        value={config.kv_unified}
+                        onChangeValue={(value) => setConfig({ ...config, kv_unified: value })}
+                    />
+
+                    <ThemedSwitch
+                        label="Full SWA Cache"
+                        value={config.swa_full}
+                        onChangeValue={(value) => setConfig({ ...config, swa_full: value })}
+                    />
+
+                    <ThemedSwitch
+                        label="Disable Extra Buffers"
+                        value={config.no_extra_bufts}
+                        onChangeValue={(value) => setConfig({ ...config, no_extra_bufts: value })}
+                        description="Disables extra buffer types for weight repacking. Lowers memory use at the cost of slower prompt processing."
                     />
 
                     {devices.length > 1 && (

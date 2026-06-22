@@ -1,0 +1,1 @@
+{"version":3,"names":["_reactNative","require","_default","exports","default","TurboModuleRegistry","get"],"sourceRoot":"../../src","sources":["NativeRNLlama.ts"],"mappings":";;;;;;AACA,IAAAA,YAAA,GAAAC,OAAA;AAAkD,IAAAC,QAAA,GAAAC,OAAA,CAAAC,OAAA,GAMnCC,gCAAmB,CAACC,GAAG,CAAO,SAAS,CAAC","ignoreList":[]}

@@ -41,6 +41,18 @@ Personalize Yourself
 
 <br/>
 
+## Changes in this fork
+
+This fork (`akumaburn/ChatterUI`) builds on upstream with the following changes:
+
+-   Runs a current build of llama.cpp via a vendored copy of the [cui-llama.rn](https://github.com/Vali-98/cui-llama.rn) adapter (under `vendor/cui-llama.rn`), compiled into the app instead of pulled from npm.
+-   Exposes all model-load settings (Flash Attention, KV-cache K/V quantization, micro-batch, mmap/mlock, unified KV cache, full SWA cache, CPU MoE layers, and more) and the full set of llama.cpp samplers (including Top-n-sigma).
+-   Removes arbitrary slider min/max caps: numeric fields accept any valid value while the sliders keep a usable range.
+-   Ships roleplay-oriented sampler defaults (Min-P, a light repetition penalty, and DRY) with unlimited generation length by default (generation ends only on a stop token / EOS, context-shifting to continue).
+-   Fixes a New-Architecture (bridgeless) crash on React Native 0.83+ where the native llama module failed to install.
+
+<br/>
+
 # Usage
 
 Download and install latest APK from the [releases](https://github.com/Vali-98/ChatterUI/releases/latest) page.
@@ -49,7 +61,7 @@ Download and install latest APK from the [releases](https://github.com/Vali-98/C
 
 ## Local Mode
 
-ChatterUI uses a [llama.cpp](https://github.com/ggerganov/llama.cpp) under the hood to run gguf files on device. A custom adapter is used to integrate with react-native: [cui-llama.rn](https://github.com/Vali-98/cui-llama.rn)
+ChatterUI uses [llama.cpp](https://github.com/ggerganov/llama.cpp) under the hood to run gguf files on device. A custom adapter is used to integrate with react-native: [cui-llama.rn](https://github.com/Vali-98/cui-llama.rn). In this fork the adapter is vendored under `vendor/cui-llama.rn` (consumed as a local `file:` dependency) and tracks a current build of llama.cpp; `npm install` links it automatically and no extra fetch step is required.
 
 To use on-device inferencing, first enable Local Mode, then go to Models > Import Model / Use External Model and choose a gguf model that can fit on your device's memory. The importing functions are as follows:
 

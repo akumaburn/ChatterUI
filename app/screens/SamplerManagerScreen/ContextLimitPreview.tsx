@@ -13,8 +13,12 @@ interface ContextLimitPreviewProps {
 const ContextLimitPreview: React.FC<ContextLimitPreviewProps> = ({ generatedLength }) => {
     const { color } = Theme.useTheme()
     const contextLimit = useContextLimit()
-    const leftover = Math.max(0, contextLimit - generatedLength)
-    const limit = leftover / contextLimit
+    // genamt <= 0 means unlimited generation; mirror the prompt-budget reserve used in
+    // LocalInference so the preview reflects how much context the prompt can actually use.
+    const unlimited = generatedLength <= 0
+    const reserve = unlimited ? Math.min(2048, Math.floor(contextLimit / 4)) : generatedLength
+    const leftover = Math.max(0, contextLimit - reserve)
+    const limit = contextLimit > 0 ? leftover / contextLimit : 0
     const warning = leftover < Math.min(2048, 0.25 * contextLimit)
     const genLengthColor = warning ? color.error._300 : color.primary._200
 
@@ -57,7 +61,7 @@ const ContextLimitPreview: React.FC<ContextLimitPreviewProps> = ({ generatedLeng
                             color: genLengthColor,
                         }}
                     />{' '}
-                    Generated: {generatedLength}
+                    Generated: {unlimited ? 'Unlimited' : generatedLength}
                 </Text>
             </View>
             {warning && (

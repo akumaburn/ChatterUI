@@ -79,13 +79,23 @@ export namespace SamplersManager {
             {
                 name: Storage.Samplers,
                 storage: createMMKVStorage(),
-                version: 1,
+                version: 2,
                 partialize: (state) => ({
                     configList: state.configList,
                     currentConfigIndex: state.currentConfigIndex,
                 }),
-                migrate: async (persistedState: any, version) => {
-                    //no migrations yet
+                migrate: (persistedState: any, version) => {
+                    // Backfill any sampler keys added in newer versions (e.g. top_n_sigma)
+                    // into existing presets so the UI never renders an undefined value.
+                    if (version < 2 && Array.isArray(persistedState?.configList)) {
+                        persistedState.configList = persistedState.configList.map(
+                            (item: SamplerConfig) => ({
+                                name: item.name,
+                                data: fixSamplerConfig(item.data),
+                            })
+                        )
+                    }
+                    return persistedState
                 },
             }
         )
@@ -126,8 +136,9 @@ export namespace SamplersManager {
     }
 
     export function getCurrentSampler() {
-        return useSamplerStore.getState().configList[useSamplerStore.getState().currentConfigIndex]
-            .data
+        const { configList, currentConfigIndex } = useSamplerStore.getState()
+        // Fall back to the first preset if the persisted index is somehow out of range
+        return (configList[currentConfigIndex] ?? configList[0]).data
     }
 
     export function useCurrentSampler(): SamplerConfig | undefined {

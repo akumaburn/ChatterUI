@@ -541,7 +541,10 @@ const FormattingManager = () => {
                                 markdownit={MarkdownStyle.Rules}
                                 rules={MarkdownStyle.RenderRules}
                                 style={markdownStyle}>
-                                {autoformatterData[currentInstruct.format_type].example}
+                                {(
+                                    autoformatterData[currentInstruct.format_type] ??
+                                    autoformatterData[0]
+                                ).example}
                             </Markdown>
                         </View>
                         <View>

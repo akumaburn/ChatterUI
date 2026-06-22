@@ -1,0 +1,252 @@
+buildscript {
+  repositories {
+    google()
+    mavenCentral()
+  }
+
+  dependencies {
+    classpath "com.android.tools.build:gradle:7.2.1"
+  }
+}
+
+def isNewArchitectureEnabled() {
+  return rootProject.hasProperty("newArchEnabled") && rootProject.getProperty("newArchEnabled") == "true"
+}
+
+apply plugin: "com.android.library"
+
+def repoRootDir = project.projectDir.parentFile
+def htpLibSourceDir = new File(repoRootDir, "bin/arm64-v8a")
+def isRNLlamaBuildFromSource = (project.findProperty("rnllamaBuildFromSource") ?: "false").toString() == "true"
+
+def appProject = rootProject.allprojects.find { it.plugins.hasPlugin('com.android.application') }
+
+if (appProject != null) {
+  def configureHtpSyncTask = { Project applicationProject ->
+    def assetsRootDir = new File(applicationProject.projectDir, "src/main/assets")
+    def ggmlHexagonDir = new File(assetsRootDir, "ggml-hexagon")
+
+    def syncTask = applicationProject.tasks.register("syncRNLlamaHtpAssets", Copy) {
+      group = "llama.rn"
+      description = "Copies llama.rn Hexagon HTP libraries into the host application's assets directory."
+
+      onlyIf {
+        if (!htpLibSourceDir.exists()) {
+          logger.info("llama.rn: No HTP libraries found at ${htpLibSourceDir.absolutePath}, skipping asset sync")
+          return false
+        }
+        true
+      }
+
+      doFirst {
+        if (!assetsRootDir.exists()) {
+          assetsRootDir.mkdirs()
+        }
+        if (!ggmlHexagonDir.exists()) {
+          ggmlHexagonDir.mkdirs()
+          return
+        }
+        ggmlHexagonDir.listFiles({ File dir, String name ->
+          name.startsWith("libggml-htp-") && name.endsWith(".so")
+        } as FilenameFilter)?.each { File lib ->
+          lib.delete()
+        }
+      }
+
+      into(assetsRootDir)
+      from(htpLibSourceDir) {
+        include "libggml-htp-*.so"
+        into "ggml-hexagon"
+      }
+    }
+
+    def prepareHtpTask = applicationProject.tasks.findByName("prepareHTP")
+    if (prepareHtpTask != null) {
+      syncTask.configure {
+        dependsOn(prepareHtpTask)
+      }
+    }
+
+    applicationProject.tasks.matching { it.name == "preBuild" }.configureEach {
+      dependsOn(syncTask)
+    }
+  }
+
+  if (appProject.state.executed) {
+    configureHtpSyncTask(appProject)
+  } else {
+    appProject.afterEvaluate {
+      configureHtpSyncTask(appProject)
+    }
+  }
+}
+
+if (isNewArchitectureEnabled()) {
+  apply plugin: "com.facebook.react"
+}
+
+def getExtOrDefault(name) {
+  return rootProject.ext.has(name) ? rootProject.ext.get(name) : project.properties["RNLlama_" + name]
+}
+
+def getExtOrIntegerDefault(name) {
+  return rootProject.ext.has(name) ? rootProject.ext.get(name) : (project.properties["RNLlama_" + name]).toInteger()
+}
+
+def reactNativeArchitectures() {
+  def value = project.getProperties().get("reactNativeArchitectures")
+  def archs = value ? value.split(",") : ["x86_64", "arm64-v8a"]
+  return archs.findAll { it != "armeabi-v7a" && it != "x86" } // Not building for 32-bit architectures
+}
+
+// Detect RN Version, ref from:
+// https://github.com/software-mansion/react-native-reanimated/blob/66a6bd0e3a819ca7ae46751d36e405fe32b68b71/packages/react-native-reanimated/android/build.gradle#L73
+def resolveReactNativeDirectory() {
+  def reactNativeLocation = rootProject.ext.has("REACT_NATIVE_NODE_MODULES_DIR") ? rootProject.ext.get("REACT_NATIVE_NODE_MODULES_DIR") : null
+  if (reactNativeLocation != null) {
+    return file(reactNativeLocation)
+  }
+
+  // Fallback to node resolver for custom directory structures like monorepos.
+  def reactNativePackage = file(["node", "--print", "require.resolve('react-native/package.json')"].execute(null, rootDir).text.trim())
+  if(reactNativePackage.exists()) {
+    return reactNativePackage.parentFile
+  }
+
+  throw new GradleException(
+          "[RNllama] Unable to resolve react-native location in node_modules. You should project extension property (in `app/build.gradle`) `REACT_NATIVE_NODE_MODULES_DIR` with path to react-native."
+  )
+}
+
+def reactNativeRootDir = resolveReactNativeDirectory()
+
+def reactProperties = new Properties()
+file("$reactNativeRootDir/ReactAndroid/gradle.properties").withInputStream { reactProperties.load(it) }
+
+def REACT_NATIVE_VERSION = reactProperties.getProperty("VERSION_NAME")
+def REACT_NATIVE_MINOR_VERSION = REACT_NATIVE_VERSION.startsWith("0.0.0-") ? 1000 : REACT_NATIVE_VERSION.split("\\.")[1].toInteger()
+
+android {
+  ndkVersion getExtOrDefault("ndkVersion")
+  def ndkVersionMajor = ndkVersion.split("\\.")[0].toInteger()
+  if (ndkVersionMajor < 24) {
+    ndkVersion = project.properties["RNLlama_ndkversion"]
+  }
+  compileSdkVersion getExtOrIntegerDefault("compileSdkVersion")
+
+  defaultConfig {
+    minSdkVersion getExtOrIntegerDefault("minSdkVersion")
+    targetSdkVersion getExtOrIntegerDefault("targetSdkVersion")
+    buildConfigField "boolean", "IS_NEW_ARCHITECTURE_ENABLED", isNewArchitectureEnabled().toString()
+    def rnllamaBuildFromSourceFlag = isRNLlamaBuildFromSource ? "ON" : "OFF"
+    def homeDir = System.getProperty("user.home")
+    def hexagonSdkRoot = System.getenv('HEXAGON_SDK_ROOT') ?: "${homeDir}/.hexagon-sdk/6.4.0.2"
+    def hexagonToolsRoot = System.getenv('HEXAGON_TOOLS_ROOT') ?: "${homeDir}/.hexagon-sdk/6.4.0.2/tools/HEXAGON_Tools/19.0.04"
+    def hexagonPresent = file(hexagonSdkRoot).exists() && file(hexagonToolsRoot).exists()
+    def cmakeArgs = [
+      "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON",
+      "-DRNLLAMA_BUILD_FROM_SOURCE=${rnllamaBuildFromSourceFlag}",
+      "-DANDROID_STL=c++_shared",
+      "-DREACT_NATIVE_MINOR_VERSION=${REACT_NATIVE_MINOR_VERSION}"
+    ]
+
+    if (hexagonPresent) {
+      println("✅ Hexagon SDK detected — enabling DSP build")
+      cmakeArgs += [
+        "-DHEXAGON_SDK_ROOT=${hexagonSdkRoot}",
+        "-DHEXAGON_TOOLS_ROOT=${hexagonToolsRoot}"
+      ]
+    } else {
+      println("🚫 Hexagon SDK not found — building CPU-only")
+    }
+
+    externalNativeBuild {
+      cmake {
+        abiFilters (*reactNativeArchitectures())
+        arguments(*cmakeArgs)
+      }
+    }
+  }
+
+  buildFeatures {
+    prefab true
+  }
+
+  externalNativeBuild {
+    cmake {
+      path = file('src/main/CMakeLists.txt')
+    }
+  }
+  if (isRNLlamaBuildFromSource) {
+    // When building from source, exclude prebuilt jniLibs
+    sourceSets {
+      main {
+        jniLibs.srcDirs = []
+      }
+    }
+  }
+  buildTypes {
+    release {
+      minifyEnabled false
+    }
+  }
+
+  lintOptions {
+    disable "GradleCompatible"
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_1_8
+    targetCompatibility JavaVersion.VERSION_1_8
+  }
+
+
+  packagingOptions {
+    jniLibs {
+      excludes += ["**/libcdsprpc.so"]
+    }
+    doNotStrip resolveBuildType() == "debug" ? "**/**/*.so" : ""
+    excludes = [
+      "META-INF",
+      "META-INF/**",
+      "**/libc++_shared.so",
+      "**/libfbjni.so",
+      "**/libjsi.so",
+      "**/libfolly_json.so",
+      "**/libfolly_runtime.so",
+      "**/libglog.so",
+      "**/libreactnative.so",
+      "**/libreactnativejni.so",
+      "**/libturbomodulejsijni.so",
+      "**/libreact_nativemodule_core.so",
+    ]
+  }
+}
+
+repositories {
+  mavenCentral()
+  google()
+}
+
+
+dependencies {
+  // For < 0.71, this will be from the local maven repo
+  // For > 0.71, this will be replaced by `com.facebook.react:react-android:$version` by react gradle plugin
+  //noinspection GradleDynamicVersion
+  implementation "com.facebook.react:react-native:+"
+}
+
+if (isNewArchitectureEnabled()) {
+  react {
+    jsRootDir = file("../src/")
+    libraryName = "RNLlama"
+    codegenJavaPackageName = "com.rnllama"
+  }
+}
+
+def resolveBuildType() {
+    Gradle gradle = getGradle()
+    String tskReqStr = gradle.getStartParameter().getTaskRequests()["args"].toString()
+
+    return tskReqStr.contains("Release") ? "release" : "debug"
+}

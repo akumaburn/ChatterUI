@@ -38,6 +38,9 @@ export enum GGMLType {
     LLAMA_FTYPE_MOSTLY_Q4_0_8_8 = 35,
     LLAMA_FTYPE_MOSTLY_TQ1_0 = 36,
     LLAMA_FTYPE_MOSTLY_TQ2_0 = 37,
+    LLAMA_FTYPE_MOSTLY_MXFP4_MOE = 38,
+    LLAMA_FTYPE_MOSTLY_NVFP4 = 39,
+    LLAMA_FTYPE_MOSTLY_Q1_0 = 40,
 }
 
 export const GGMLNameMap = {
@@ -77,6 +80,9 @@ export const GGMLNameMap = {
     [GGMLType.LLAMA_FTYPE_MOSTLY_Q4_0_8_8]: 'Q4_0_8_8',
     [GGMLType.LLAMA_FTYPE_MOSTLY_TQ1_0]: 'TQ1_0',
     [GGMLType.LLAMA_FTYPE_MOSTLY_TQ2_0]: 'TQ2_0',
+    [GGMLType.LLAMA_FTYPE_MOSTLY_MXFP4_MOE]: 'MXFP4_MOE',
+    [GGMLType.LLAMA_FTYPE_MOSTLY_NVFP4]: 'NVFP4',
+    [GGMLType.LLAMA_FTYPE_MOSTLY_Q1_0]: 'Q1_0',
 }
 
 export const checkGGMLDeprecated = (type: number) => {

@@ -52,9 +52,10 @@ const SamplerManagerScreen = () => {
 
     const getSamplerList = (): APISampler[] => {
         if (appMode === 'local') return localSamplerData
-        if (activeIndex !== -1) {
+        const activeConfigName = apiValues[activeIndex]?.configName
+        if (activeIndex !== -1 && activeConfigName) {
             const template = getTemplates().find(
-                (item: APIConfiguration) => item.name === apiValues[activeIndex].configName
+                (item: APIConfiguration) => item.name === activeConfigName
             )
             if (!template) return []
             return template.request.samplerFields
@@ -96,6 +97,9 @@ const SamplerManagerScreen = () => {
     }
 
     const samplerList = getSamplerList()
+
+    // Guard against an out-of-range persisted config index (corrupted/migrated store)
+    if (!currentConfig) return null
 
     const headerRight = () => (
         <ContextMenu

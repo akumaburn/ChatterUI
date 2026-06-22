@@ -60,12 +60,38 @@ export type LlamaState = {
     tokenize: (text: string, media_paths?: string[]) => Promise<{ tokens: number[] } | undefined>
 }
 
+// KV cache quantization types accepted by the binding (see cui-llama.rn ContextParams).
+export type CacheType = 'f16' | 'f32' | 'q8_0' | 'q4_0' | 'q4_1' | 'iq4_nl' | 'q5_0' | 'q5_1'
+export const cacheTypeValues: CacheType[] = [
+    'f16',
+    'f32',
+    'q8_0',
+    'q5_1',
+    'q5_0',
+    'q4_1',
+    'q4_0',
+    'iq4_nl',
+]
+
+export type FlashAttnType = 'auto' | 'on' | 'off'
+export const flashAttnValues: FlashAttnType[] = ['auto', 'on', 'off']
+
 export type LlamaConfig = {
     context_length: number
     threads: number
     gpu_layers: number
     batch: number
+    ubatch: number
     ctx_shift: boolean
+    flash_attn: FlashAttnType
+    cache_type_k: CacheType
+    cache_type_v: CacheType
+    use_mmap: boolean
+    use_mlock: boolean
+    kv_unified: boolean
+    swa_full: boolean
+    cpu_moe_layers: number
+    no_extra_bufts: boolean
     devices: string[]
 }
 
@@ -81,12 +107,22 @@ export type EngineDataProps = {
 
 const sessionFile = `${AppDirectory.SessionPath}llama-session.bin`
 
-const defaultConfig = {
+const defaultConfig: LlamaConfig = {
     context_length: 4096,
     threads: 4,
     gpu_layers: 0,
     batch: 512,
+    ubatch: 512,
     ctx_shift: true,
+    flash_attn: 'auto',
+    cache_type_k: 'f16',
+    cache_type_v: 'f16',
+    use_mmap: true,
+    use_mlock: true,
+    kv_unified: false,
+    swa_full: true,
+    cpu_moe_layers: 0,
+    no_extra_bufts: false,
     devices: [],
 }
 
@@ -121,7 +157,7 @@ export namespace Llama {
                     lastMmproj: state.lastMmproj,
                 }),
                 storage: createMMKVStorage(),
-                version: 3,
+                version: 4,
                 migrate: (persistedState: any, version) => {
                     if (version === 1) {
                         persistedState.config.ctx_shift = true
@@ -131,6 +167,12 @@ export namespace Llama {
                         persistedState.config.devices = []
                         Logger.info('Migrated to v3 EngineData')
                     }
+                    if (version < 4) {
+                        // Backfill newly exposed model-load settings with defaults
+                        persistedState.config = { ...defaultConfig, ...persistedState.config }
+                        Logger.info('Migrated to v4 EngineData')
+                    }
+                    return persistedState
                 },
             }
         )
@@ -172,15 +214,23 @@ export namespace Llama {
                 n_ctx: config.context_length,
                 n_threads: config.threads,
                 n_batch: config.batch,
+                n_ubatch: config.ubatch,
                 ctx_shift: config.ctx_shift,
                 n_gpu_layers: config.gpu_layers,
-                use_mlock: true,
-                use_mmap: true,
+                flash_attn_type: config.flash_attn,
+                cache_type_k: config.cache_type_k,
+                cache_type_v: config.cache_type_v,
+                use_mlock: config.use_mlock,
+                use_mmap: config.use_mmap,
+                kv_unified: config.kv_unified,
+                swa_full: config.swa_full,
+                n_cpu_moe: config.cpu_moe_layers,
+                no_extra_bufts: config.no_extra_bufts,
                 devices: config.devices,
             }
 
             Logger.info(
-                `\n------ MODEL LOAD -----\n Model Name: ${model.name}\nStarting with parameters: \nContext Length: ${params.n_ctx}\nThreads: ${params.n_threads}\nBatch Size: ${params.n_batch}\nGPU Layers: ${params.n_gpu_layers}`
+                `\n------ MODEL LOAD -----\n Model Name: ${model.name}\nStarting with parameters: \nContext Length: ${params.n_ctx}\nThreads: ${params.n_threads}\nBatch Size: ${params.n_batch}\nuBatch Size: ${params.n_ubatch}\nGPU Layers: ${params.n_gpu_layers}\nFlash Attention: ${params.flash_attn_type}\nKV Cache: ${params.cache_type_k}/${params.cache_type_v}`
             )
 
             const progressCallback = (progress: number) => {

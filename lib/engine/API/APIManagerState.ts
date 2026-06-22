@@ -63,6 +63,9 @@ export namespace APIManager {
                     let activeIndex = get().activeIndex
                     if (index === activeIndex) {
                         activeIndex = -1
+                    } else if (index < activeIndex) {
+                        // Keep activeIndex pointing at the same connection after the splice
+                        activeIndex -= 1
                     }
                     values.splice(index, 1)
                     set({ values: values, activeIndex: activeIndex })

@@ -6,12 +6,16 @@ node_modules*
 # dev items
 public/
 
-# builds
-android
+# builds (anchored to repo root so they don't match the vendored module's android/ios)
+/android
 eas.json
 *.apk
 .gradle
-ios
+/ios
+
+# vendored native module build artifacts (generated; sources are kept)
+vendor/**/build/
+vendor/**/.cxx/
 
 # Expo
 .expo/

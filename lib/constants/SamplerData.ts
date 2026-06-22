@@ -45,6 +45,7 @@ export enum SamplerID {
     DRY_PENALTY_LAST_N = 'dry_penalty_last_n',
     XTC_THRESHOLD = 'xtc_threshold',
     XTC_PROBABILITY = 'xtc_probability',
+    TOP_N_SIGMA = 'top_n_sigma',
     KEEP_ALIVE_DURATION = 'keep_alive_duration',
 
     // Reasoning API
@@ -117,10 +118,10 @@ export const Samplers = {
         macro: '{{max_context_length}}',
         values: {
             type: 'integer',
-            min: 1024,
-            max: 128000,
+            min: 256,
+            max: 1048576,
             default: 8192,
-            step: 16,
+            step: 256,
             precision: 0,
         },
     },
@@ -141,9 +142,10 @@ export const Samplers = {
         macro: '{{generted_length}}',
         values: {
             type: 'integer',
-            min: 16,
-            max: 32768,
-            default: 256,
+            // -1 = unlimited (generate until a stop token / EOS, context-shifting as needed)
+            min: -1,
+            max: 1048576,
+            default: -1,
             step: 1,
             precision: 0,
         },
@@ -155,8 +157,8 @@ export const Samplers = {
         macro: '{{temp}}',
         values: {
             type: 'float',
-            min: 0.01,
-            max: 3,
+            min: 0,
+            max: 5,
             default: 1,
             step: 0.01,
             precision: 2,
@@ -185,7 +187,7 @@ export const Samplers = {
             type: 'float',
             min: 0,
             max: 1,
-            default: 0,
+            default: 0.05,
             step: 0.01,
             precision: 2,
         },
@@ -216,6 +218,21 @@ export const Samplers = {
             default: 0,
             step: 0.01,
             precision: 2,
+        },
+    },
+    [SamplerID.TOP_N_SIGMA]: {
+        internalID: SamplerID.TOP_N_SIGMA,
+        friendlyName: 'Top N Sigma',
+        inputType: 'slider',
+        macro: '{{top_n_sigma}}',
+        values: {
+            type: 'float',
+            // -1 disables the sampler; positive values keep tokens within N std devs of the top logit
+            min: -1,
+            max: 10,
+            default: -1,
+            step: 0.1,
+            precision: 1,
         },
     },
     [SamplerID.TOP_P]: {
@@ -254,8 +271,8 @@ export const Samplers = {
         values: {
             type: 'integer',
             min: 0,
-            max: 200,
-            default: 100,
+            max: 1000,
+            default: 0,
             step: 1,
             precision: 0,
         },
@@ -268,8 +285,8 @@ export const Samplers = {
         values: {
             type: 'float',
             min: 1,
-            max: 1.5,
-            default: 1,
+            max: 3,
+            default: 1.1,
             step: 0.01,
             precision: 2,
         },
@@ -281,9 +298,10 @@ export const Samplers = {
         macro: '{{rep_pen_range}}',
         values: {
             type: 'integer',
-            min: 1,
-            max: 4096,
-            default: 1,
+            // -1 = use full context size, 0 = disabled
+            min: -1,
+            max: 32768,
+            default: 2048,
             step: 1,
             precision: 0,
         },
@@ -562,8 +580,9 @@ export const Samplers = {
         values: {
             type: 'integer',
             default: -1,
+            // -1 = random seed; upper bound is the uint32 max accepted by llama.cpp
             min: -1,
-            max: 100000,
+            max: 4294967295,
             step: 1,
             precision: 0,
         },
@@ -678,7 +697,7 @@ export const Samplers = {
             type: 'float',
             min: 0,
             max: 10,
-            default: 0,
+            default: 0.8,
             step: 0.01,
             precision: 2,
         },
@@ -692,7 +711,7 @@ export const Samplers = {
             type: 'float',
             min: 0,
             max: 10,
-            default: 0,
+            default: 1.75,
             step: 0.01,
             precision: 2,
         },
@@ -706,7 +725,7 @@ export const Samplers = {
             type: 'integer',
             min: 0,
             max: 8196,
-            default: 0,
+            default: 2,
             step: 1,
             precision: 0,
         },
@@ -728,11 +747,12 @@ export const Samplers = {
         macro: '{{dry_penalty_last_n}}',
         values: {
             type: 'integer',
+            // -1 = use full context size, 0 = disabled
             min: -1,
-            max: 8196,
-            default: 0,
+            max: 32768,
+            default: -1,
             step: 1,
-            precision: 1,
+            precision: 0,
         },
     },
     [SamplerID.REASONING_EFFORT]: {
