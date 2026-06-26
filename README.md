@@ -55,7 +55,7 @@ This fork (`akumaburn/ChatterUI`) builds on upstream with the following changes:
 
 # Usage
 
-Download and install latest APK from the [releases](https://github.com/Vali-98/ChatterUI/releases/latest) page.
+Download and install latest APK from this fork's [releases](https://github.com/akumaburn/ChatterUI/releases/latest) page.
 
 <i>iOS is Currently unavailable due to lacking iOS hardware for development</i>
 
